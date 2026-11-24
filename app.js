@@ -1315,24 +1315,24 @@ function initNetworkImportDialog() {
     if (savedFtp.gateway) txtFtpGateway.value = savedFtp.gateway;
   } catch (e) {}
 
-  let activeTab = 'http'; // 'http' | 'ftp'
+  let activeTab = 'ftp'; // 'ftp' (Tab 0) | 'http' (Tab 1)
 
   function switchTab(tab) {
     activeTab = tab;
-    if (tab === 'http') {
+    if (tab === 'ftp') {
+      btnTabFtp.classList.add('active');
+      btnTabHttp.classList.remove('active');
+      pageFtp.style.display = 'flex';
+      pageHttp.style.display = 'none';
+      btnExecuteHttpDownload.textContent = '⬇️ 下载所选目标并载入';
+      lblNetworkStatus.textContent = '就绪。请选择 FTP 浏览载入，或输入 HTTP/HTTPS 直链下载版控文件。';
+    } else {
       btnTabHttp.classList.add('active');
       btnTabFtp.classList.remove('active');
       pageHttp.style.display = 'flex';
       pageFtp.style.display = 'none';
       btnExecuteHttpDownload.textContent = '⬇️ 立即下载并直接载入';
       lblNetworkStatus.textContent = '就绪。输入直链后点击【探测链接】或【立即下载并直接载入】。';
-    } else {
-      btnTabFtp.classList.add('active');
-      btnTabHttp.classList.remove('active');
-      pageHttp.style.display = 'none';
-      pageFtp.style.display = 'flex';
-      btnExecuteHttpDownload.textContent = '⚡ 从 FTP 下载并直接载入';
-      lblNetworkStatus.textContent = 'FTP 模式：支持配置主机与网关，或通过快捷复制直接识别填充。';
     }
   }
 
