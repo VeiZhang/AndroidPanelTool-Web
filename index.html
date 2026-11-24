@@ -173,7 +173,7 @@
                 <div class="form-row">
                   <label class="form-label">当前端口模式值:</label>
                   <span class="badge-modified" id="badgeEdid" style="display: none;">•已修改</span>
-                  <input type="text" id="txtEdidType" class="input-text" style="width: 180px;" value="1, 0, 0, 0" placeholder="例: 1, 2, 2, 0" />
+                  <input type="text" id="txtEdidType" class="input-text" style="width: 260px;" value="1, 0, 0, 0" placeholder="例: 1, 2, 2, 0" />
                   <button class="btn btn-success" id="btnAutoEdid" title="仅固定中间两位为 2（开启 4K@60Hz），首尾位保持当前原配置不变">⚡ 一键设为 EDID Auto (x, 2, 2, x)</button>
                 </div>
                 <div class="hint-text">💡 提示：EDID Auto 规范仅固定第2位和第3位为 2（即 x, 2, 2, x），首尾位保持原配置值不变。</div>
@@ -303,7 +303,7 @@
                 </div>
                 <div class="form-row">
                   <label class="form-label">方案选择:</label>
-                  <select id="selMediaSuite" class="select-input" style="min-width: 380px;">
+                  <select id="selMediaSuite" class="select-input" style="min-width: 480px; max-width: 640px;">
                     <option value="">--- 请选择常用预设套装 (Logo + 动画同步) ---</option>
                     <option value="EasyHub-4K">✨ EasyHub-4K (Logo: 512.0 KB | 动画: 8.20 MB)</option>
                     <option value="中性(众焌)-2K">✨ 中性(众焌)-2K (Logo: 256.0 KB | 动画: 4.10 MB)</option>
@@ -322,7 +322,7 @@
                 <div class="file-status-line" id="lblLogoStatus">当前文件: 尚未载入工程 | 尺寸: -- | 状态: 未修改</div>
                 <div class="form-row" style="margin-top: 8px;">
                   <label class="form-label">内置预设选项:</label>
-                  <select id="selLogoPreset" class="select-input" style="min-width: 380px;">
+                  <select id="selLogoPreset" class="select-input" style="min-width: 480px; max-width: 640px;">
                     <option value="">[选择内置预设 Logo 快速替换]</option>
                     <option value="EasyHub-4K">🖼️ EasyHub-4K (logo.img - 512.0 KB)</option>
                     <option value="中性(众焌)-2K">🖼️ 中性(众焌)-2K (logo.img - 256.0 KB)</option>
@@ -346,7 +346,7 @@
                 <div class="file-status-line" id="lblAnimStatus">当前文件: 尚未载入工程 | 尺寸: -- | 状态: 未修改</div>
                 <div class="form-row" style="margin-top: 8px;">
                   <label class="form-label">内置预设选项:</label>
-                  <select id="selAnimPreset" class="select-input" style="min-width: 380px;">
+                  <select id="selAnimPreset" class="select-input" style="min-width: 480px; max-width: 640px;">
                     <option value="">[选择内置预设开机动画快速替换]</option>
                     <option value="EasyHub-4K">🎬 EasyHub-4K (bootanimation.zip - 8.20 MB)</option>
                     <option value="中性(众焌)-2K">🎬 中性(众焌)-2K (bootanimation.zip - 4.10 MB)</option>
@@ -515,9 +515,9 @@
               <table class="data-table" id="noticeTable">
                 <thead>
                   <tr>
-                    <th style="width: 100px;">模块</th>
-                    <th style="width: 200px;">核对项</th>
-                    <th style="width: 88px; text-align: center;">状态</th>
+                    <th style="width: 130px;">模块</th>
+                    <th style="width: 260px;">核对项</th>
+                    <th style="width: 95px; text-align: center;">状态</th>
                     <th>当前生效值 / 变更对比</th>
                   </tr>
                 </thead>

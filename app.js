@@ -1270,10 +1270,10 @@ function renderNoticeTable(allRows) {
       : `<span style="color:#cbd5e1;">${escapeHtml(r.current)}</span>`;
 
     tr.innerHTML = `
-      <td style="font-weight: bold; color: #93c5fd;">${escapeHtml(r.category)}</td>
-      <td style="font-family: monospace; font-size: 12.5px;">${escapeHtml(r.field)}</td>
-      <td style="text-align: center;">${statusBadge}</td>
-      <td style="font-family: monospace; font-size: 12.5px;">${valHtml}</td>
+      <td style="font-weight: bold; color: #93c5fd; white-space: nowrap;">${escapeHtml(r.category)}</td>
+      <td style="font-family: monospace; font-size: 13.5px; word-break: break-word;">${escapeHtml(r.field)}</td>
+      <td style="text-align: center; white-space: nowrap;">${statusBadge}</td>
+      <td style="font-family: monospace; font-size: 13.5px; word-break: break-word;">${valHtml}</td>
     `;
     tbody.appendChild(tr);
   }
