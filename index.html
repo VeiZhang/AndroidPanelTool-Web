@@ -23,19 +23,25 @@
       <input type="file" id="fileInputDir" webkitdirectory directory style="display: none;" />
       <button class="btn btn-secondary" id="btnOpenFolder">📁 打开工程目录...</button>
       <input type="file" id="fileInputZip" accept=".zip" style="display: none;" />
-      <button class="btn btn-secondary" id="btnOpenZip">📦 导入 ZIP 升级包...</button>
+      <button class="btn btn-secondary" id="btnOpenZip" title="支持单层或双层嵌套 ZIP 升级包，自动解压识别">📦 导入 ZIP 升级包...</button>
     </div>
 
     <div class="top-bar-center">
       <!-- Segmented View Switcher: [📑 详细配置工作台] [📊 适配总览卡片] -->
       <div class="view-toggle-frame">
-        <button class="btn-toggle active" id="btnViewTabs">📑 详细配置工作台</button>
-        <button class="btn-toggle" id="btnViewDash">📊 适配总览卡片</button>
+        <button class="btn-toggle active" id="btnViewTabs" title="当前模式：编辑各项具体配置文件">📑 详细配置工作台</button>
+        <button class="btn-toggle" id="btnViewDash" title="当前模式：查看主要配置参数的全局概要卡片">📊 适配总览卡片</button>
       </div>
     </div>
 
     <div class="top-bar-right">
-      <button class="btn btn-secondary" id="btnResetProject" title="清空当前载入的工程数据">🔄 重置工程</button>
+      <div class="dropdown-wrapper">
+        <button class="btn btn-secondary" id="btnRecent">🕒 历史工程 ▾</button>
+        <div class="dropdown-menu" id="menuRecent">
+          <div class="dropdown-item-empty" id="recentEmpty">暂无最近打开工程记录</div>
+        </div>
+      </div>
+      <button class="btn btn-secondary" id="btnOpenSettings">⚙️ 设置</button>
     </div>
   </header>
 
@@ -48,12 +54,16 @@
       <div class="path-row">
         <span class="path-tag">📦 原版控包:</span>
         <span class="path-val" id="lblSourcePath">-</span>
-        <button class="btn-path-action" id="btnCopySource">📋 复制</button>
+        <div class="dropdown-wrapper" id="wrapCandidate" style="display: none;">
+          <button class="btn-path-action" id="btnSwitchCandidate" style="color: #38bdf8; font-weight: bold;">🔄 切换版控 ▾</button>
+          <div class="dropdown-menu" id="menuCandidate"></div>
+        </div>
+        <button class="btn-path-action" id="btnCopySource" title="复制原始版控完整标识到剪贴板">📋 复制</button>
       </div>
       <div class="path-row">
         <span class="path-tag">📂 工作目录:</span>
         <span class="path-val" id="lblWorkspacePath">内存虚拟工作区 (PanelFiles)</span>
-        <button class="btn-path-action" id="btnCopyWorkspace">📋 复制</button>
+        <button class="btn-path-action" id="btnCopyWorkspace" title="复制解压工作区目录标识到剪贴板">📋 复制</button>
       </div>
     </div>
   </section>
@@ -105,7 +115,7 @@
     <!-- Left Column: Center Stack (Tabs or Dashboard) -->
     <div class="center-stack" id="centerStack">
       
-      <!-- View 0: Tabs Container -->
+      <!-- View 0: Tabs Container (详细配置工作台) -->
       <div class="tabs-container" id="viewTabsContainer">
         <!-- Tab Navigation Bar -->
         <nav class="tab-nav">
@@ -116,129 +126,278 @@
           <button class="tab-btn" data-tab="tabDiff">⑤ 修改对照与 Diff 核对</button>
         </nav>
 
-        <!-- Tab 1: Props -->
+        <!-- Tab 1: Props (build.prop) -->
         <section class="tab-content active" id="tabProps">
           <div class="tab-toolbar">
-            <div style="display: flex; gap: 8px; align-items: center; flex: 1; max-width: 520px;">
-              <input type="text" id="txtPropSearch" class="input-text" style="flex: 1;" placeholder="🔍 搜索属性名 (Key) 或属性值 (Value)..." />
-              <button class="btn btn-secondary" id="btnAddProp">+ 新增属性</button>
+            <span style="font-weight: bold; color: #38bdf8; font-size: 13px;">📌 build.prop 系统属性管理 (支持增删改查，保留注释与原排版)</span>
+            <span id="lblChangeStats" style="font-weight: bold; font-size: 12.5px; margin-left: 8px;"></span>
+            <div style="flex: 1;"></div>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <input type="text" id="txtPropSearch" class="input-text" style="width: 240px;" placeholder="🔍 快速搜索属性 Key/Value..." />
+              <button class="btn btn-success" id="btnAddProp">➕ 新增属性</button>
             </div>
-            <span id="lblPropsCount" style="color: #94a3b8; font-size: 12.5px;">暂未载入工程</span>
           </div>
           <div class="table-container">
-            <table class="data-table">
+            <table class="data-table" id="propsTable">
               <thead>
                 <tr>
                   <th style="width: 48px; text-align: center;">#</th>
-                  <th style="width: 40%;">属性名 (Property Key)</th>
-                  <th>当前值 (Property Value)</th>
-                  <th style="width: 80px; text-align: center;">操作</th>
+                  <th style="width: 420px;">属性名 (Key)</th>
+                  <th>属性值 (Value)</th>
                 </tr>
               </thead>
               <tbody id="propsTableBody">
                 <tr>
-                  <td colspan="4" style="text-align: center; color: #64748b; padding: 40px 0;">
+                  <td colspan="3" style="text-align: center; color: #64748b; padding: 40px 0;">
                     尚未载入工程，请在上方导入 ZIP 或工程目录
                   </td>
                 </tr>
               </tbody>
             </table>
           </div>
+          <div class="tab-bottom-bar">
+            <button class="btn btn-danger" id="btnDeleteProp">➖ 删除选中行</button>
+            <span class="duplicate-warn" id="lblDuplicateWarn"></span>
+            <div style="flex: 1;"></div>
+            <span id="lblPropsCount" style="color: #94a3b8; font-size: 12.5px;">暂未载入属性</span>
+          </div>
         </section>
 
-        <!-- Tab 2: Color & EDID -->
+        <!-- Tab 2: Color & EDID (db.ini) 1:1 Aligned with Desktop -->
         <section class="tab-content" id="tabColor">
-          <div class="color-grid">
-            <div class="setting-card">
-              <h3 class="card-title">🎨 画质标准色温调节 (db.ini)</h3>
-              <div class="slider-row">
-                <label>红通道增益 (R Gain):</label>
-                <input type="range" id="rangeR" min="0" max="255" value="128" />
-                <span class="range-val" id="valR">128</span>
-              </div>
-              <div class="slider-row">
-                <label>绿通道增益 (G Gain):</label>
-                <input type="range" id="rangeG" min="0" max="255" value="128" />
-                <span class="range-val" id="valG">128</span>
-              </div>
-              <div class="slider-row">
-                <label>蓝通道增益 (B Gain):</label>
-                <input type="range" id="rangeB" min="0" max="255" value="128" />
-                <span class="range-val" id="valB">128</span>
-              </div>
-              <div class="color-preview-box">
-                <div class="color-swatch" id="colorSwatch"></div>
-                <span class="color-hex" id="lblColorHex">RGB(128, 128, 128)</span>
+          <div class="color-edid-stack">
+            <!-- Group 1: EDID Config -->
+            <div class="group-box">
+              <div class="group-title">1. EDID 配置 (db.ini -> HDMIRXEdidType)</div>
+              <div class="group-content">
+                <div class="form-row">
+                  <label class="form-label">当前端口模式值:</label>
+                  <span class="badge-modified" id="badgeEdid" style="display: none;">•已修改</span>
+                  <input type="text" id="txtEdidType" class="input-text" style="width: 180px;" value="1, 0, 0, 0" placeholder="例: 1, 2, 2, 0" />
+                  <button class="btn btn-success" id="btnAutoEdid" title="仅固定中间两位为 2（开启 4K@60Hz），首尾位保持当前原配置不变">⚡ 一键设为 EDID Auto (x, 2, 2, x)</button>
+                </div>
+                <div class="hint-text">💡 提示：EDID Auto 规范仅固定第2位和第3位为 2（即 x, 2, 2, x），首尾位保持原配置值不变。</div>
               </div>
             </div>
 
-            <div class="setting-card">
-              <h3 class="card-title">📺 EDID 显示时序与握手参数</h3>
-              <div style="margin-bottom: 12px;">
-                <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer;">
-                  <input type="radio" name="edidMode" value="auto" id="radioEdidAuto" checked />
-                  <span>自动匹配面板最佳时序 (Auto EDID)</span>
-                </label>
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                  <input type="radio" name="edidMode" value="manual" id="radioEdidManual" />
-                  <span>自定义注入高级 EDID Hex 字段</span>
-                </label>
+            <!-- Group 2: Core Color Temperature (_nature) -->
+            <div class="group-box">
+              <div class="group-title">2. 核心色温配置 (db.ini -> FacColorTemp_*_nature 高频常用修改)</div>
+              <div class="group-content">
+                <div class="form-row">
+                  <label class="form-label">当前标准自然色温 (_nature) 原值:</label>
+                  <span id="lblOrigColorSample" class="color-sample-text">256, 256, 240, 256, 256, 256</span>
+                  <span class="badge-modified" id="badgeColor" style="display: none;">•已修改</span>
+                </div>
+
+                <div class="nature-inputs-container">
+                  <div class="nature-input-col">
+                    <span class="nature-input-label">R_Gain</span>
+                    <input type="text" id="txtRGain" class="input-text nature-input" value="256" />
+                  </div>
+                  <div class="nature-input-col">
+                    <span class="nature-input-label">G_Gain</span>
+                    <input type="text" id="txtGGain" class="input-text nature-input" value="256" />
+                  </div>
+                  <div class="nature-input-col">
+                    <span class="nature-input-label">B_Gain</span>
+                    <input type="text" id="txtBGain" class="input-text nature-input" value="240" />
+                  </div>
+                  <div class="nature-input-col">
+                    <span class="nature-input-label">R_Offset</span>
+                    <input type="text" id="txtROffset" class="input-text nature-input" value="256" />
+                  </div>
+                  <div class="nature-input-col">
+                    <span class="nature-input-label">G_Offset</span>
+                    <input type="text" id="txtGOffset" class="input-text nature-input" value="256" />
+                  </div>
+                  <div class="nature-input-col">
+                    <span class="nature-input-label">B_Offset</span>
+                    <input type="text" id="txtBOffset" class="input-text nature-input" value="256" />
+                  </div>
+                </div>
+
+                <div class="form-row" style="margin-top: 10px;">
+                  <button class="btn btn-warning" id="btnBatchApplyNature">🎨 一键批量同步应用至所有 _nature 规则</button>
+                  <span class="unapplied-warn" id="lblUnappliedWarn" style="display: none;">⚠️ 已修改但未点击【一键批量同步应用】，直接保存/打包不会生效！</span>
+                </div>
+                <div class="hint-text">💡 提示：点击后将自动将所有通道（atv, hdmi, media 等）的 _nature 规则统一更新为上述 6 个参数。</div>
               </div>
-              <textarea id="txtEdidHex" class="input-text" style="width: 100%; height: 95px; font-family: monospace; resize: none;" placeholder="例: 00 FF FF FF FF FF FF 00 ... (可留空自动适配)"></textarea>
+            </div>
+
+            <!-- Group 3: Other Color Temperature Modes -->
+            <div class="group-box">
+              <div class="group-title">3. 其他色温模式参考 (🔒 默认只读保护，防止误改)</div>
+              <div class="group-content">
+                <div class="form-row">
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="chkUnlockOther" />
+                    <span>🔓 允许编辑其他模式（默认严格只读锁定防误改；如无特殊测试要求请勿勾选）</span>
+                  </label>
+                  <div style="flex: 1;"></div>
+                  <button class="btn btn-secondary" id="btnBatchApplyOther" disabled>🎨 批量更新当前选中模式</button>
+                </div>
+
+                <div class="table-container" style="min-height: 140px; max-height: 200px; margin-top: 8px;">
+                  <table class="data-table" id="otherColorTable">
+                    <thead>
+                      <tr>
+                        <th style="width: 140px;">色温模式 (Mode)</th>
+                        <th>6 项参数值 (R, G, B, R_off, G_off, B_off)</th>
+                        <th style="width: 110px; text-align: center;">保护状态</th>
+                      </tr>
+                    </thead>
+                    <tbody id="otherColorTableBody">
+                      <tr data-mode="cool">
+                        <td>_cool</td>
+                        <td class="other-val-cell">256, 256, 256, 256, 256, 256</td>
+                        <td style="text-align: center;"><span class="badge-lock">🔒 只读锁定</span></td>
+                      </tr>
+                      <tr data-mode="warm">
+                        <td>_warm</td>
+                        <td class="other-val-cell">256, 240, 220, 256, 256, 256</td>
+                        <td style="text-align: center;"><span class="badge-lock">🔒 只读锁定</span></td>
+                      </tr>
+                      <tr data-mode="user">
+                        <td>_user</td>
+                        <td class="other-val-cell">256, 256, 256, 256, 256, 256</td>
+                        <td style="text-align: center;"><span class="badge-lock">🔒 只读锁定</span></td>
+                      </tr>
+                      <tr data-mode="tocool">
+                        <td>_Tocool</td>
+                        <td class="other-val-cell">未配置</td>
+                        <td style="text-align: center;"><span class="badge-lock">🔒 只读锁定</span></td>
+                      </tr>
+                      <tr data-mode="towarm">
+                        <td>_Towarm</td>
+                        <td class="other-val-cell">未配置</td>
+                        <td style="text-align: center;"><span class="badge-lock">🔒 只读锁定</span></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           </div>
         </section>
 
-        <!-- Tab 3: Media -->
+        <!-- Tab 3: Media Replace (Logo & Anim) 1:1 Aligned with Desktop -->
         <section class="tab-content" id="tabMedia">
-          <div class="media-grid">
-            <div class="setting-card">
-              <h3 class="card-title">🖼️ 第一屏开机 Logo (logo.img)</h3>
-              <p style="color: #94a3b8; font-size: 12.5px; margin-bottom: 12px;">
-                引导阶段显示的第一屏品牌 Logo。替换后将自动重新打包进固件中。
-              </p>
-              <div class="media-status-box">
-                <span>当前状态:</span>
-                <span id="lblLogoDesc" style="color: #38bdf8; font-weight: bold;">缺省</span>
+          <div class="media-stack">
+            <!-- Box 0: Identification -->
+            <div class="group-box">
+              <div class="group-title">🔍 当前工程开机资源自动匹配与识别</div>
+              <div class="group-content">
+                <div class="id-badge-box" id="lblMediaIdBadge">
+                  载入版控工程后将自动比对识别当前开机 Logo 与动画种类...
+                </div>
               </div>
-              <input type="file" id="fileInputLogo" accept=".img,.png,.bmp" style="display: none;" />
-              <button class="btn btn-secondary" id="btnReplaceLogo" style="margin-top: 10px;">🔄 替换 Logo 镜像...</button>
             </div>
 
-            <div class="setting-card">
-              <h3 class="card-title">🎬 第二屏开机动画 (bootanimation.zip)</h3>
-              <p style="color: #94a3b8; font-size: 12.5px; margin-bottom: 12px;">
-                Android 系统启动过场动画资源包。标准未压缩 ZIP 格式封装。
-              </p>
-              <div class="media-status-box">
-                <span>当前状态:</span>
-                <span id="lblAnimDesc" style="color: #38bdf8; font-weight: bold;">缺省</span>
+            <!-- Box 1: Suite Presets -->
+            <div class="group-box">
+              <div class="group-title">🌟 内置常用成套预设方案 (一键同步套用 Logo + 开机动画)</div>
+              <div class="group-content">
+                <div class="hint-text" style="margin-bottom: 8px;">
+                  快速将整套成熟的品牌/中性开机方案（包含对应的 logo.img 与 bootanimation.zip）同步应用到当前工程：
+                </div>
+                <div class="form-row">
+                  <label class="form-label">方案选择:</label>
+                  <select id="selMediaSuite" class="select-input" style="min-width: 380px;">
+                    <option value="">--- 请选择常用预设套装 (Logo + 动画同步) ---</option>
+                    <option value="EasyHub-4K">✨ EasyHub-4K (Logo: 512.0 KB | 动画: 8.20 MB)</option>
+                    <option value="中性(众焌)-2K">✨ 中性(众焌)-2K (Logo: 256.0 KB | 动画: 4.10 MB)</option>
+                    <option value="中性(众焌)-4K">✨ 中性(众焌)-4K (Logo: 512.0 KB | 动画: 7.90 MB)</option>
+                    <option value="鸿合-2K">✨ 鸿合-2K (Logo: 256.0 KB | 动画: 4.50 MB)</option>
+                    <option value="鸿合-4K">✨ 鸿合-4K (Logo: 512.0 KB | 动画: 8.60 MB)</option>
+                  </select>
+                </div>
               </div>
-              <input type="file" id="fileInputAnim" accept=".zip" style="display: none;" />
-              <button class="btn btn-secondary" id="btnReplaceAnim" style="margin-top: 10px;">🔄 替换开机动画包...</button>
+            </div>
+
+            <!-- Box 2: Logo -->
+            <div class="group-box">
+              <div class="group-title">🖼️ 开机 Logo 替换 (PanelFiles/logo.img)</div>
+              <div class="group-content">
+                <div class="file-status-line" id="lblLogoStatus">当前文件: 尚未载入工程 | 尺寸: -- | 状态: 未修改</div>
+                <div class="form-row" style="margin-top: 8px;">
+                  <label class="form-label">内置预设选项:</label>
+                  <select id="selLogoPreset" class="select-input" style="min-width: 380px;">
+                    <option value="">[选择内置预设 Logo 快速替换]</option>
+                    <option value="EasyHub-4K">🖼️ EasyHub-4K (logo.img - 512.0 KB)</option>
+                    <option value="中性(众焌)-2K">🖼️ 中性(众焌)-2K (logo.img - 256.0 KB)</option>
+                    <option value="中性(众焌)-4K">🖼️ 中性(众焌)-4K (logo.img - 512.0 KB)</option>
+                    <option value="鸿合-2K">🖼️ 鸿合-2K (logo.img - 256.0 KB)</option>
+                    <option value="鸿合-4K">🖼️ 鸿合-4K (logo.img - 512.0 KB)</option>
+                  </select>
+                </div>
+                <div class="form-row" style="margin-top: 8px;">
+                  <input type="file" id="fileInputLogo" accept=".img,.png,.bmp" style="display: none;" />
+                  <button class="btn btn-secondary" id="btnReplaceLogo">📂 自定义选择本地 logo.img 文件...</button>
+                  <button class="btn btn-secondary" id="btnResetLogo">↺ 恢复原包 Logo</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Box 3: Bootanimation -->
+            <div class="group-box">
+              <div class="group-title">🎬 开机动画替换 (PanelFiles/bootanimation.zip)</div>
+              <div class="group-content">
+                <div class="file-status-line" id="lblAnimStatus">当前文件: 尚未载入工程 | 尺寸: -- | 状态: 未修改</div>
+                <div class="form-row" style="margin-top: 8px;">
+                  <label class="form-label">内置预设选项:</label>
+                  <select id="selAnimPreset" class="select-input" style="min-width: 380px;">
+                    <option value="">[选择内置预设开机动画快速替换]</option>
+                    <option value="EasyHub-4K">🎬 EasyHub-4K (bootanimation.zip - 8.20 MB)</option>
+                    <option value="中性(众焌)-2K">🎬 中性(众焌)-2K (bootanimation.zip - 4.10 MB)</option>
+                    <option value="中性(众焌)-4K">🎬 中性(众焌)-4K (bootanimation.zip - 7.90 MB)</option>
+                    <option value="鸿合-2K">🎬 鸿合-2K (bootanimation.zip - 4.50 MB)</option>
+                    <option value="鸿合-4K">🎬 鸿合-4K (bootanimation.zip - 8.60 MB)</option>
+                  </select>
+                </div>
+                <div class="form-row" style="margin-top: 8px;">
+                  <input type="file" id="fileInputAnim" accept=".zip" style="display: none;" />
+                  <button class="btn btn-secondary" id="btnReplaceAnim">📂 自定义选择本地 bootanimation.zip 文件...</button>
+                  <button class="btn btn-secondary" id="btnResetAnim">↺ 恢复原包动画</button>
+                </div>
+              </div>
             </div>
           </div>
         </section>
 
-        <!-- Tab 4: SingleMode -->
+        <!-- Tab 4: SingleMode (singleMode.txt) 1:1 Aligned with Desktop -->
         <section class="tab-content" id="tabSingleMode">
-          <div class="setting-card" style="max-width: 600px;">
-            <h3 class="card-title">🖥️ 教学白板/会议大屏 分屏模式 (singleMode.txt)</h3>
-            <p style="color: #94a3b8; font-size: 13px; margin-bottom: 16px;">
-              针对双屏或拼接交互白板设备，控制是否启用单屏全屏限制。
-            </p>
-            <div style="display: flex; gap: 24px; margin-bottom: 16px;">
-              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                <input type="radio" name="singleMode" value="off" id="radioSmOff" checked />
-                <span style="font-weight: 500;">关闭分屏限制 (off - 缺省)</span>
-              </label>
-              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                <input type="radio" name="singleMode" value="on" id="radioSmOn" />
-                <span style="font-weight: 500;">启用分屏限制 (on)</span>
-              </label>
-            </div>
-            <div style="color: #64748b; font-size: 12px;">
-              💡 说明：修改后打包时将自动写入 <code>singleMode.txt</code>。
+          <div class="group-box">
+            <div class="group-title">🖥️ 分屏设置 (PanelFiles/singleMode.txt)</div>
+            <div class="group-content">
+              <div class="form-row">
+                <span class="file-status-line" id="lblSingleModeStatus">当前文件: 尚未载入工程 | 状态: 未修改</span>
+                <span class="badge-modified" id="badgeSingleMode" style="display: none;">•已修改</span>
+              </div>
+
+              <div class="split-select-box">
+                <div style="font-weight: bold; color: #f1f5f9; font-size: 13px; margin-bottom: 12px;">
+                  请选择分屏模式开关状态（将写入 singleMode.txt）：
+                </div>
+                <div style="display: flex; gap: 18px;">
+                  <label class="radio-card radio-card-on" id="labelRadioOn">
+                    <input type="radio" name="singleModeRadio" value="on" id="radioSmOn" />
+                    <span>on  （开启）</span>
+                  </label>
+                  <label class="radio-card radio-card-off active" id="labelRadioOff">
+                    <input type="radio" name="singleModeRadio" value="off" id="radioSmOff" checked />
+                    <span>off （关闭）</span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="form-row" style="margin-top: 14px;">
+                <button class="btn btn-secondary" id="btnResetSingleMode">↺ 恢复原包设置</button>
+              </div>
+
+              <div class="hint-text" style="margin-top: 12px;">
+                💡 提示：该文件仅在 Android 智能交互大屏中生效，用于控制教学/会议白板的多窗口分屏行为。若原工程中不存在此文件，修改后将自动创建。
+              </div>
             </div>
           </div>
         </section>
@@ -257,49 +416,38 @@
         </section>
       </div>
 
-      <!-- View 1: Dashboard View (适配总览卡片) -->
+      <!-- View 1: Dashboard View (适配总览卡片) 1:1 Aligned with Desktop -->
       <div class="dashboard-container" id="viewDashContainer" style="display: none;">
+        <div style="font-weight: bold; color: #38bdf8; font-size: 14px; margin-bottom: 10px;">
+          📊 整体版控适配总览模式 (已自动同步主数据)
+        </div>
         <div class="dash-grid">
           <div class="dash-card">
-            <h3 class="dash-title">📋 基础版控信息</h3>
-            <div class="dash-item"><span class="dash-label">版控识别码:</span><span class="dash-val" id="dashPm">-</span></div>
-            <div class="dash-item"><span class="dash-label">屏厂品牌:</span><span class="dash-val" id="dashVendor">-</span></div>
-            <div class="dash-item"><span class="dash-label">屏型号:</span><span class="dash-val" id="dashScreen">-</span></div>
-            <div class="dash-item"><span class="dash-label">分辨率:</span><span class="dash-val" id="dashRes">-</span></div>
-            <div class="dash-item"><span class="dash-label">版本号:</span><span class="dash-val" id="dashVer">V1.0.0</span></div>
+            <h3 class="dash-title">系统属性概要</h3>
+            <div class="dash-content-block" id="dashPropsSummary">当前未载入属性</div>
           </div>
 
           <div class="dash-card">
-            <h3 class="dash-title">⚙️ 系统关键属性摘要</h3>
-            <div class="dash-item"><span class="dash-label">通道识别码:</span><span class="dash-val" id="dashChannel">-</span></div>
-            <div class="dash-item"><span class="dash-label">产品型号:</span><span class="dash-val" id="dashModel">-</span></div>
-            <div class="dash-item"><span class="dash-label">总属性数:</span><span class="dash-val" id="dashPropsCount">0</span></div>
+            <h3 class="dash-title">画质与 EDID 概要</h3>
+            <div class="dash-content-block" id="dashColorSummary">当前未载入 db.ini</div>
           </div>
 
           <div class="dash-card">
-            <h3 class="dash-title">🎨 显示与画质规格</h3>
-            <div class="dash-item"><span class="dash-label">色温增益:</span><span class="dash-val" id="dashRgb">R:128 G:128 B:128</span></div>
-            <div class="dash-item"><span class="dash-label">EDID 模式:</span><span class="dash-val" id="dashEdid">自动匹配</span></div>
-          </div>
-
-          <div class="dash-card">
-            <h3 class="dash-title">🎬 开机媒体与分屏模式</h3>
-            <div class="dash-item"><span class="dash-label">开机 Logo:</span><span class="dash-val" id="dashLogo">缺省</span></div>
-            <div class="dash-item"><span class="dash-label">开机动画:</span><span class="dash-val" id="dashAnim">缺省</span></div>
-            <div class="dash-item"><span class="dash-label">分屏模式:</span><span class="dash-val" id="dashSingleMode">off (关闭)</span></div>
+            <h3 class="dash-title">开机媒体与分屏模式概要</h3>
+            <div class="dash-content-block" id="dashMediaSummary">当前未载入媒体与分屏配置</div>
           </div>
         </div>
       </div>
 
     </div>
 
-    <!-- Right Column: ValidationDock (实时检查与操作) -->
+    <!-- Right Column: ValidationDock (实时检查与操作) 1:1 Aligned with Desktop -->
     <aside class="validation-dock">
       <div class="dock-header">
         <span class="dock-title">📋 实时检查与操作</span>
         <div style="display: flex; gap: 6px;">
-          <button class="btn btn-warning" id="btnPackagingNotice">⚠️ 发版安全须知</button>
-          <button class="btn btn-secondary" id="btnValidate">🔍 校验</button>
+          <button class="btn btn-warning" id="btnPackagingNotice" title="查看生产与发版 5 大关键核对清单及风险警示说明">⚠️ 发版安全须知</button>
+          <button class="btn btn-secondary" id="btnValidate" title="手动执行全模块规范性与合规性校验">🔍 校验</button>
         </div>
       </div>
 
@@ -315,8 +463,8 @@
 
       <!-- Action Buttons -->
       <div class="dock-actions">
-        <button class="btn btn-secondary btn-full" id="btnSaveMemory" title="将当前修改写回到内存工作区，不执行耗时的 ZIP 压缩">
-          💾 仅保存写回各配置文件 (内存)
+        <button class="btn btn-secondary btn-full" id="btnSaveMemory" title="直接将当前界面修改的系统属性（build.prop）、色温与EDID（db.ini）、以及屏参元数据保存写回到内存工作区。&#10;★ 适合日常草稿修改，不执行耗时的 ZIP 压缩与 MD5 计算。">
+          💾 仅保存写回各配置文件
         </button>
         <button class="btn btn-success btn-full btn-package-main" id="btnPackage" title="严格执行 5 步安全核对流程，生成双层合规 ZIP 固件包与标准 MD5">
           🚀 一键验证并打包固件 (双层ZIP+MD5)
@@ -341,35 +489,132 @@
     <span id="lblStatus">就绪，支持直接拖拽 ZIP 压缩包或工程文件夹至本窗口</span>
   </footer>
 
-  <!-- Modal: Packaging Notice Dialog (发版安全须知 / 产线发版双栏核对) -->
+  <!-- Modal 1: Packaging Notice Dialog (产线发版双栏核对) 1:1 Aligned with Desktop -->
   <div class="modal-overlay" id="modalNotice" style="display: none;">
-    <div class="modal-box modal-wide">
+    <div class="modal-box modal-huge">
       <div class="modal-header">
-        <h3 class="modal-title" style="color: #fbbf24;">⚠️ 产线发版核对与安全须知</h3>
+        <h3 class="modal-title" style="color: #fbbf24;" id="noticeModalTitle">📦 产线发版打包前修改核对与安全须知</h3>
         <button class="modal-close" id="btnCloseNotice">&times;</button>
       </div>
-      <div class="modal-body" style="max-height: 72vh; overflow-y: auto;">
-        <div class="notice-callout">
-          <strong>【发版最高准则】</strong>：任何未经双栏比对核对的屏参配置均不得直接下发产线烧录！
+      <div class="modal-body modal-split-body">
+        <!-- Left Side: Table (64%) -->
+        <div class="modal-left-col">
+          <div class="mod-card">
+            <div class="mod-card-header">
+              <span style="color: #e2e8f0; font-size: 14px; font-weight: bold;">📋 打包前完整核对清单</span>
+              <span id="badgeCritMod" class="badge-crit" style="display: none;">⚠️ 0 项关键改动</span>
+              <span id="badgeModCount" class="badge-mod">无改动</span>
+              <span id="badgeUnchangedCount" class="badge-unchanged">沿用原包 0 项</span>
+              <div style="flex: 1;"></div>
+              <div class="view-toggle-frame">
+                <button class="btn-toggle active" id="btnFilterAll">全部 (0)</button>
+                <button class="btn-toggle" id="btnFilterMod">仅看已修改 (0)</button>
+              </div>
+            </div>
+            <div class="table-container" style="flex: 1; min-height: 380px;">
+              <table class="data-table" id="noticeTable">
+                <thead>
+                  <tr>
+                    <th style="width: 100px;">模块</th>
+                    <th style="width: 200px;">核对项</th>
+                    <th style="width: 88px; text-align: center;">状态</th>
+                    <th>当前生效值 / 变更对比</th>
+                  </tr>
+                </thead>
+                <tbody id="noticeTableBody">
+                  <tr>
+                    <td colspan="4" style="text-align: center; color: #64748b; padding: 40px 0;">
+                      ℹ️ 本次载入后未修改任何参数（将按当前原包配置直接验证并打包）。
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
 
-        <h4 style="margin: 16px 0 8px 0; color: #38bdf8;">📋 产线发版五大核心核对项：</h4>
-        <ul style="padding-left: 20px; line-height: 1.8; color: #cbd5e1; font-size: 13px;">
-          <li><strong>1. 版控识别码（20位）</strong>：确认与硬件主板及结构 BOM 严格一致（当前：<span id="noticePm" style="color:#fbbf24;">-</span>）。</li>
-          <li><strong>2. 屏厂与型号</strong>：确认屏参驱动与物理液晶模组匹配（当前：<span id="noticePanel" style="color:#fbbf24;">-</span>）。</li>
-          <li><strong>3. 通道识别标识</strong>：确保 <code>persist.hht.channel.identify</code> 等核心属性未被意外篡改。</li>
-          <li><strong>4. 色温标准增益</strong>：确认符合当前产线批次白平衡标准（当前：<span id="noticeRgb" style="color:#fbbf24;">RGB(128,128,128)</span>）。</li>
-          <li><strong>5. MD5 校验完整性</strong>：发版打包后必须校验生成的 <code>.md5</code> 校验和与产线烧录机一致。</li>
-        </ul>
+        <!-- Right Side: Sidebar Checklist Cards (36%) -->
+        <div class="modal-right-col">
+          <!-- Top Alert Card -->
+          <div class="top-alert-card">
+            <div class="alert-line-red">
+              🚨 <b>机器一定要对上：</b>核对标签编号与项目一致（不仅看颜色，最好跟项目确认）
+            </div>
+            <div class="alert-line-yellow">
+              ⚠️ <b>确认修改并内测：</b>与项目明确修改点，自测完最好让研发内测
+            </div>
+          </div>
 
-        <h4 style="margin: 18px 0 8px 0; color: #38bdf8;">🔍 本次变动项汇总核对：</h4>
-        <div id="noticeDiffContainer" style="background: #111827; border: 1px solid #2d3748; border-radius: 6px; padding: 10px; max-height: 220px; overflow-y: auto;">
-          <div style="color: #64748b; text-align: center;">暂无修改项</div>
+          <!-- 5 Core Checklists Card -->
+          <div class="checklist-card">
+            <div class="checklist-title">📋 产线发版 5 大核心核对清单</div>
+            
+            <div class="checklist-item">
+              <div class="item-title">1. 版控码 & 屏参配置</div>
+              <div class="item-desc">核对机器版控识别码、OC、日期是否与 hht_panel_cfg.ini 及邮件要求一致。</div>
+            </div>
+            <div class="item-sep"></div>
+
+            <div class="checklist-item">
+              <div class="item-title">2. EDID 配置</div>
+              <div class="item-desc">主要是核对邮件是否要求 EDID auto。</div>
+            </div>
+            <div class="item-sep"></div>
+
+            <div class="checklist-item">
+              <div class="item-title">3. 开机 Logo & 动画</div>
+              <div class="item-desc">核对开机动画包规格及 Logo 图像格式与项目需求一致。</div>
+            </div>
+            <div class="item-sep"></div>
+
+            <div class="checklist-item">
+              <div class="item-title">4. 色温色坐标</div>
+              <div class="item-desc">核对各通道色温曲线（_nature、_cool 等），确保画质一致。</div>
+            </div>
+            <div class="item-sep"></div>
+
+            <div class="checklist-item">
+              <div class="item-title">5. panel.bin</div>
+              <div class="item-desc">98 寸 panel.bin 为特殊定制，尺寸变更时需与项目 + 产品 + 供应商确认。</div>
+            </div>
+          </div>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" id="btnCancelNotice">返回检查</button>
-        <button class="btn btn-success" id="btnConfirmNoticeAndPackage">✅ 我已完整核对，开始打包生成</button>
+        <button class="btn btn-secondary" id="btnCopyAllNotice">📋 复制全部须知内容</button>
+        <div style="flex: 1;"></div>
+        <button class="btn btn-secondary" id="btnCancelNotice">❌ 返回仔细检查</button>
+        <button class="btn btn-success" id="btnConfirmNoticeAndPackage" style="padding: 7px 18px; font-weight: bold;">
+          ✅ 我已仔细核对无误，继续打包
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: Settings Dialog -->
+  <div class="modal-overlay" id="modalSettings" style="display: none;">
+    <div class="modal-box" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3 class="modal-title">⚙️ 偏好设置</h3>
+        <button class="modal-close" id="btnCloseSettings">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="setting-item" style="margin-bottom: 14px;">
+          <label style="display: block; font-weight: bold; margin-bottom: 6px;">默认固件打包版本号:</label>
+          <input type="text" id="settingDefaultVersion" class="input-text" style="width: 100%;" value="V1.0.0" />
+        </div>
+        <div class="setting-item" style="margin-bottom: 14px;">
+          <label class="checkbox-label">
+            <input type="checkbox" id="settingAutoValidate" checked />
+            <span>输入变动时自动执行实时规则校验</span>
+          </label>
+        </div>
+        <div class="setting-item">
+          <button class="btn btn-danger" id="btnClearHistory">🗑️ 清空历史工程记录</button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btnSaveSettings">保存设置</button>
       </div>
     </div>
   </div>
