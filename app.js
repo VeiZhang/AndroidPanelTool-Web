@@ -106,43 +106,7 @@ function showToast(text, duration = 2500) {
   }, duration);
 }
 
-// --- Local Storage: Recent Projects ---
-function getRecentProjects() {
-  try {
-    return JSON.parse(localStorage.getItem('apt_recent_projects') || '[]');
-  } catch (e) {
-    return [];
-  }
-}
-
-function saveRecentProject(name) {
-  if (!name) return;
-  let list = getRecentProjects().filter(p => p !== name);
-  list.unshift(name);
-  if (list.length > 8) list = list.slice(0, 8);
-  localStorage.setItem('apt_recent_projects', JSON.stringify(list));
-  renderRecentMenu();
-}
-
-function renderRecentMenu() {
-  const menu = document.getElementById('menuRecent');
-  if (!menu) return;
-  const list = getRecentProjects();
-  if (list.length === 0) {
-    menu.innerHTML = `<div class="dropdown-item-empty">暂无最近打开工程记录</div>`;
-    return;
-  }
-  menu.innerHTML = '';
-  for (const item of list) {
-    const div = document.createElement('div');
-    div.className = 'dropdown-item';
-    div.innerHTML = `<span>📦 ${escapeHtml(item)}</span>`;
-    div.addEventListener('click', () => {
-      showToast(`历史记录: ${item} (请点击上方按钮重新导入该文件)`);
-    });
-    menu.appendChild(div);
-  }
-}
+// --- Single Project Active State ---
 
 // --- Parsers & Serializers ---
 
@@ -445,7 +409,6 @@ async function loadZipArrayBuffer(buffer, filename) {
     }
 
     state.isLoaded = true;
-    saveRecentProject(filename);
     applyLoadedFilesToUI();
     logConsole(`升级包解析完成！共提取 ${Object.keys(state.files).length} 个配置文件与资源`, 'success');
     showToast('工程解析载入成功！', 2500);
@@ -500,7 +463,6 @@ async function loadDirectoryFiles(fileList) {
     }
 
     state.isLoaded = true;
-    saveRecentProject(rootName);
     applyLoadedFilesToUI();
     logConsole(`本地工程目录载入完成！共读取 ${Object.keys(state.files).length} 个文件`, 'success');
     showToast('目录工程载入成功！', 2500);
@@ -1295,10 +1257,381 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
+// --- Network & FTP Import Dialog Handling ---
+let currentHttpAbortController = null;
+let currentHttpInspectedData = null;
+
+function initNetworkImportDialog() {
+  const modal = document.getElementById('modalNetworkImport');
+  const btnOpen = document.getElementById('btnOpenFtp');
+  const btnClose = document.getElementById('btnCloseNetworkImport');
+  const btnClose2 = document.getElementById('btnCloseNetworkImport2');
+
+  const btnTabHttp = document.getElementById('btnTabHttpImport');
+  const btnTabFtp = document.getElementById('btnTabFtpImport');
+  const pageHttp = document.getElementById('pageHttpImport');
+  const pageFtp = document.getElementById('pageFtpImport');
+
+  const txtHttpUrl = document.getElementById('txtHttpUrl');
+  const btnHttpPaste = document.getElementById('btnHttpPaste');
+  const btnHttpInspect = document.getElementById('btnHttpInspect');
+  const btnExecuteHttpDownload = document.getElementById('btnExecuteHttpDownload');
+  const btnCancelDownload = document.getElementById('btnCancelNetworkDownload');
+
+  const lblHttpFilename = document.getElementById('lblHttpFilename');
+  const lblHttpFileSize = document.getElementById('lblHttpFileSize');
+  const lblHttpContentType = document.getElementById('lblHttpContentType');
+  const lblHttpStatusTag = document.getElementById('lblHttpStatusTag');
+  const httpCorsAlert = document.getElementById('httpCorsAlert');
+  const linkHttpDirectDownload = document.getElementById('linkHttpDirectDownload');
+
+  const boxHttpProgress = document.getElementById('boxHttpProgress');
+  const barHttpProgress = document.getElementById('barHttpProgress');
+  const lblHttpProgressStatus = document.getElementById('lblHttpProgressStatus');
+  const lblHttpProgressPercent = document.getElementById('lblHttpProgressPercent');
+  const lblNetworkStatus = document.getElementById('lblNetworkImportStatus');
+
+  // FTP elements
+  const txtFtpQuickUrl = document.getElementById('txtFtpQuickUrl');
+  const btnFtpParseQuick = document.getElementById('btnFtpParseQuick');
+  const txtFtpHost = document.getElementById('txtFtpHost');
+  const txtFtpPort = document.getElementById('txtFtpPort');
+  const txtFtpUser = document.getElementById('txtFtpUser');
+  const txtFtpPass = document.getElementById('txtFtpPass');
+  const txtFtpPath = document.getElementById('txtFtpPath');
+  const txtFtpGateway = document.getElementById('txtFtpGateway');
+
+  if (!modal || !btnOpen) return;
+
+  // Restore saved config
+  try {
+    const savedHttpUrl = localStorage.getItem('apt_last_http_url');
+    if (savedHttpUrl) txtHttpUrl.value = savedHttpUrl;
+    const savedFtp = JSON.parse(localStorage.getItem('apt_ftp_config') || '{}');
+    if (savedFtp.host) txtFtpHost.value = savedFtp.host;
+    if (savedFtp.port) txtFtpPort.value = savedFtp.port;
+    if (savedFtp.user) txtFtpUser.value = savedFtp.user;
+    if (savedFtp.path) txtFtpPath.value = savedFtp.path;
+    if (savedFtp.gateway) txtFtpGateway.value = savedFtp.gateway;
+  } catch (e) {}
+
+  let activeTab = 'http'; // 'http' | 'ftp'
+
+  function switchTab(tab) {
+    activeTab = tab;
+    if (tab === 'http') {
+      btnTabHttp.classList.add('active');
+      btnTabFtp.classList.remove('active');
+      pageHttp.style.display = 'flex';
+      pageFtp.style.display = 'none';
+      btnExecuteHttpDownload.textContent = '⬇️ 立即下载并直接载入';
+      lblNetworkStatus.textContent = '就绪。输入直链后点击【探测链接】或【立即下载并直接载入】。';
+    } else {
+      btnTabFtp.classList.add('active');
+      btnTabHttp.classList.remove('active');
+      pageHttp.style.display = 'none';
+      pageFtp.style.display = 'flex';
+      btnExecuteHttpDownload.textContent = '⚡ 从 FTP 下载并直接载入';
+      lblNetworkStatus.textContent = 'FTP 模式：支持配置主机与网关，或通过快捷复制直接识别填充。';
+    }
+  }
+
+  btnTabHttp.addEventListener('click', () => switchTab('http'));
+  btnTabFtp.addEventListener('click', () => switchTab('ftp'));
+
+  btnOpen.addEventListener('click', () => {
+    modal.style.display = 'flex';
+  });
+
+  const closeModal = () => {
+    if (currentHttpAbortController) {
+      if (confirm('下载正在进行中，是否确定取消下载并关闭窗口？')) {
+        currentHttpAbortController.abort();
+        currentHttpAbortController = null;
+        modal.style.display = 'none';
+      }
+    } else {
+      modal.style.display = 'none';
+    }
+  };
+  btnClose.addEventListener('click', closeModal);
+  if (btnClose2) btnClose2.addEventListener('click', closeModal);
+
+  // Quick Paste for HTTP
+  btnHttpPaste.addEventListener('click', async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        txtHttpUrl.value = text.trim();
+        showToast('已从剪贴板粘贴直链');
+        inspectHttpUrl(txtHttpUrl.value);
+      }
+    } catch (e) {
+      txtHttpUrl.focus();
+      showToast('无法读取系统剪贴板，请手动使用 Ctrl+V 粘贴', 2000);
+    }
+  });
+
+  txtHttpUrl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      inspectHttpUrl(txtHttpUrl.value.trim());
+    }
+  });
+
+  btnHttpInspect.addEventListener('click', () => {
+    inspectHttpUrl(txtHttpUrl.value.trim());
+  });
+
+  function parseFilenameFromUrl(url) {
+    try {
+      const u = new URL(url);
+      const parts = u.pathname.split('/').filter(Boolean);
+      if (parts.length > 0) {
+        const last = parts[parts.length - 1];
+        return decodeURIComponent(last);
+      }
+    } catch (e) {}
+    return 'network_panel_package.zip';
+  }
+
+  function formatBytes(bytes) {
+    if (bytes === null || bytes === undefined || isNaN(bytes) || bytes <= 0) return '未知大小';
+    const mb = bytes / (1024 * 1024);
+    if (mb >= 1) return mb.toFixed(2) + ' MB';
+    const kb = bytes / 1024;
+    return kb.toFixed(1) + ' KB';
+  }
+
+  async function inspectHttpUrl(rawUrl) {
+    if (!rawUrl) {
+      alert('请先输入或粘贴 HTTP/HTTPS 直链下载地址。');
+      txtHttpUrl.focus();
+      return;
+    }
+    if (!rawUrl.toLowerCase().startsWith('http://') && !rawUrl.toLowerCase().startsWith('https://')) {
+      alert('不支持的协议：仅支持以 http:// 或 https:// 开头的网络下载链接。');
+      return;
+    }
+
+    localStorage.setItem('apt_last_http_url', rawUrl);
+    lblNetworkStatus.textContent = `正在探测链接信息: ${rawUrl}...`;
+    lblHttpStatusTag.innerHTML = `<span style="color:#fbbf24;">🔍 探测中...</span>`;
+    httpCorsAlert.style.display = 'none';
+
+    let fallbackName = parseFilenameFromUrl(rawUrl);
+    lblHttpFilename.textContent = fallbackName;
+    linkHttpDirectDownload.href = rawUrl;
+
+    try {
+      const resp = await fetch(rawUrl, { method: 'HEAD', mode: 'cors' }).catch(async () => {
+        return await fetch(rawUrl, { method: 'GET', headers: { 'Range': 'bytes=0-0' }, mode: 'cors' });
+      });
+
+      if (!resp.ok && resp.status !== 206) {
+        throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
+      }
+
+      let size = null;
+      const cl = resp.headers.get('content-length');
+      const cr = resp.headers.get('content-range');
+      if (cl) size = parseInt(cl, 10);
+      else if (cr) {
+        const m = cr.match(/\/(\d+)/);
+        if (m) size = parseInt(m[1], 10);
+      }
+
+      const ct = resp.headers.get('content-type') || 'application/octet-stream';
+      const cd = resp.headers.get('content-disposition');
+      if (cd) {
+        const fnMatch = cd.match(/filename\*?=['"]?(?:UTF-\d['"]*)?([^;\r\n"']*)['"]?/i);
+        if (fnMatch && fnMatch[1]) fallbackName = decodeURIComponent(fnMatch[1]);
+      }
+
+      lblHttpFilename.textContent = fallbackName;
+      lblHttpFileSize.textContent = formatBytes(size);
+      lblHttpContentType.textContent = ct;
+      lblHttpStatusTag.innerHTML = `<span style="color:#4ade80; font-weight:bold;">✅ 探测成功，可直接在线下载</span>`;
+      lblNetworkStatus.textContent = `探测成功: ${fallbackName} (${formatBytes(size)})`;
+
+      currentHttpInspectedData = {
+        url: rawUrl,
+        filename: fallbackName,
+        size: size,
+        contentType: ct
+      };
+    } catch (err) {
+      lblHttpStatusTag.innerHTML = `<span style="color:#f87171;">⚠️ 浏览器直连受限 (CORS/网络)</span>`;
+      lblHttpFileSize.textContent = '未知 (受 CORS 限制)';
+      lblHttpContentType.textContent = 'application/zip (推断)';
+      httpCorsAlert.style.display = 'block';
+      lblNetworkStatus.textContent = `提示: 目标服务器未开放 CORS，直接在线请求可能受限，支持一键在浏览器打开下载。`;
+
+      currentHttpInspectedData = {
+        url: rawUrl,
+        filename: fallbackName,
+        size: null,
+        contentType: 'application/zip'
+      };
+    }
+  }
+
+  // Execute Download
+  btnExecuteHttpDownload.addEventListener('click', async () => {
+    if (activeTab === 'ftp') {
+      const host = txtFtpHost.value.trim();
+      const gateway = txtFtpGateway.value.trim();
+      if (!host) {
+        alert('请先输入 FTP 服务器 IP / 主机地址。');
+        txtFtpHost.focus();
+        return;
+      }
+      localStorage.setItem('apt_ftp_config', JSON.stringify({
+        host: host,
+        port: txtFtpPort.value,
+        user: txtFtpUser.value.trim(),
+        path: txtFtpPath.value.trim(),
+        gateway: gateway
+      }));
+
+      if (gateway) {
+        const fullGatewayUrl = `${gateway}?host=${encodeURIComponent(host)}&port=${txtFtpPort.value}&user=${encodeURIComponent(txtFtpUser.value)}&path=${encodeURIComponent(txtFtpPath.value)}`;
+        runStreamDownload(fullGatewayUrl, 'ftp_upgrade.zip');
+      } else {
+        alert(
+          '【浏览器安全沙箱限制说明】\n\n' +
+          '现代网页由于浏览器安全限制，无法直接对 FTP 21 端口建立原生 TCP Socket 连接。\n\n' +
+          '推荐操作方式：\n' +
+          '1. 请切换至【🔗 HTTP / HTTPS 直链下载】标签页使用 HTTP 协议下载；\n' +
+          '2. 或在本地 FileZilla/资源管理器下载后，直接将 ZIP 包拖拽进本网页，立即毫秒级载入！'
+        );
+      }
+      return;
+    }
+
+    const rawUrl = txtHttpUrl.value.trim();
+    if (!rawUrl) {
+      alert('请先输入或粘贴 HTTP/HTTPS 直链下载地址。');
+      txtHttpUrl.focus();
+      return;
+    }
+    const filename = currentHttpInspectedData ? currentHttpInspectedData.filename : parseFilenameFromUrl(rawUrl);
+    runStreamDownload(rawUrl, filename);
+  });
+
+  async function runStreamDownload(url, filename) {
+    currentHttpAbortController = new AbortController();
+    btnExecuteHttpDownload.disabled = true;
+    btnCancelDownload.style.display = 'inline-block';
+    boxHttpProgress.style.display = 'block';
+    barHttpProgress.style.width = '0%';
+    lblHttpProgressPercent.textContent = '0%';
+    lblHttpProgressStatus.textContent = '正在连接服务器建立流式下载...';
+    lblNetworkStatus.textContent = `正在下载: ${url}...`;
+    httpCorsAlert.style.display = 'none';
+
+    try {
+      const response = await fetch(url, {
+        signal: currentHttpAbortController.signal,
+        mode: 'cors'
+      });
+
+      if (!response.ok) {
+        throw new Error(`下载响应失败 HTTP ${response.status} ${response.statusText}`);
+      }
+
+      const contentLength = response.headers.get('content-length');
+      const totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
+      let loadedBytes = 0;
+
+      const reader = response.body.getReader();
+      const chunks = [];
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        loadedBytes += value.length;
+
+        if (totalBytes > 0) {
+          const pct = Math.min(100, Math.round((loadedBytes / totalBytes) * 100));
+          barHttpProgress.style.width = pct + '%';
+          lblHttpProgressPercent.textContent = pct + '%';
+          lblHttpProgressStatus.textContent = `已下载 ${formatBytes(loadedBytes)} / ${formatBytes(totalBytes)} (${pct}%)`;
+        } else {
+          lblHttpProgressStatus.textContent = `已下载 ${formatBytes(loadedBytes)} (未知总大小)...`;
+          barHttpProgress.style.width = '70%';
+        }
+      }
+
+      lblHttpProgressStatus.textContent = '下载完成，正在合并数据缓冲区...';
+      const allChunks = new Uint8Array(loadedBytes);
+      let position = 0;
+      for (const chunk of chunks) {
+        allChunks.set(chunk, position);
+        position += chunk.length;
+      }
+
+      lblHttpProgressStatus.textContent = '数据提取成功，正在解压并载入工作台...';
+      barHttpProgress.style.width = '100%';
+      lblHttpProgressPercent.textContent = '100%';
+
+      modal.style.display = 'none';
+      logConsole(`🌐 [网络导入成功] 成功从 ${url} 下载并载入: ${filename} (${formatBytes(loadedBytes)})`, 'success');
+      showToast(`网络下载完成！正在解析工程: ${filename}...`, 2500);
+
+      await loadZipArrayBuffer(allChunks.buffer, filename);
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        lblHttpProgressStatus.textContent = '已取消下载';
+        lblNetworkStatus.textContent = '用户取消了下载操作。';
+        showToast('已取消下载');
+      } else {
+        lblHttpProgressStatus.textContent = `❌ 下载受阻: ${err.message}`;
+        lblNetworkStatus.textContent = `下载失败: ${err.message} (可能受目标服务器跨域策略 CORS 限制)`;
+        httpCorsAlert.style.display = 'block';
+        linkHttpDirectDownload.href = url;
+        showToast('下载失败: 请检查链接或查看窗口中的 CORS 跨域指引', 3500);
+      }
+    } finally {
+      currentHttpAbortController = null;
+      btnExecuteHttpDownload.disabled = false;
+      btnCancelDownload.style.display = 'none';
+    }
+  }
+
+  btnCancelDownload.addEventListener('click', () => {
+    if (currentHttpAbortController) {
+      currentHttpAbortController.abort();
+      currentHttpAbortController = null;
+    }
+  });
+
+  // FTP Quick parse
+  btnFtpParseQuick.addEventListener('click', () => {
+    const raw = txtFtpQuickUrl.value.trim();
+    if (!raw) return;
+    try {
+      const m = raw.match(/^ftp:\/\/(?:([^:@]+)(?::([^@]+))?@)?([^:/]+)(?::(\d+))?(\/.*)?$/i);
+      if (m) {
+        if (m[1]) txtFtpUser.value = decodeURIComponent(m[1]);
+        if (m[2]) txtFtpPass.value = decodeURIComponent(m[2]);
+        if (m[3]) txtFtpHost.value = m[3];
+        if (m[4]) txtFtpPort.value = m[4];
+        if (m[5]) txtFtpPath.value = m[5];
+        showToast('已成功识别并填充 FTP 连接参数');
+      } else {
+        alert('无法解析该 FTP 格式。标准格式例如：ftp://admin:123456@192.168.1.100:21/panel_upgrade.zip');
+      }
+    } catch (e) {
+      alert('解析失败: ' + e.message);
+    }
+  });
+}
+
 // --- Event Listeners Setup ---
 
 document.addEventListener('DOMContentLoaded', () => {
-  renderRecentMenu();
+  initNetworkImportDialog();
 
   // 1. File Inputs & Import Buttons
   const fileInputZip = document.getElementById('fileInputZip');
@@ -1676,11 +2009,6 @@ document.addEventListener('DOMContentLoaded', () => {
     state.settings.autoValidate = document.getElementById('settingAutoValidate').checked;
     modalSettings.style.display = 'none';
     showToast('偏好设置已保存');
-  });
-  document.getElementById('btnClearHistory').addEventListener('click', () => {
-    localStorage.removeItem('apt_recent_projects');
-    renderRecentMenu();
-    showToast('历史工程记录已清空');
   });
 
   document.getElementById('btnRefreshDiff').addEventListener('click', () => {
