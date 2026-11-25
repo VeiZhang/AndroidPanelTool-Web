@@ -1662,8 +1662,14 @@ function initNetworkImportDialog() {
 
       lblNetworkStatus.textContent = `已浏览目录 ${currentFtpDir}（共 ${entries.length} 项；双击目录进入，双击文件下载载入）`;
     } catch (err) {
-      ftpBrowseTableBody.innerHTML = `<tr><td colspan="3" style="text-align:center; padding: 24px; color:#f87171;">❌ 连接/浏览失败: ${escapeHtml(err.message)}</td></tr>`;
-      lblNetworkStatus.textContent = `FTP 目录拉取失败: ${err.message}`;
+      const isConnErr = /failed to fetch|networkerror/i.test(err.message || '');
+      const hintHtml = isConnErr
+        ? `❌ <b>连接本地代理网关失败</b>（<code>${escapeHtml(gateway)}</code> 未响应或被拦截）<br/>` +
+          `<span style="color:#cbd5e1;">1. 请确认已在本地终端运行 <code>python ftp_bridge.py</code>（保持终端窗口开启）；</span><br/>` +
+          `<span style="color:#cbd5e1;">2. 若使用 HTTPS 网页访问本机代理，请重新点击【📋 复制本地代理脚本】更新最新脚本（已兼容 Chrome 私有网络权限头）。</span>`
+        : `❌ 连接/浏览失败: ${escapeHtml(err.message)}`;
+      ftpBrowseTableBody.innerHTML = `<tr><td colspan="3" style="text-align:left; padding: 18px 16px; color:#f87171; line-height: 1.65;">${hintHtml}</td></tr>`;
+      lblNetworkStatus.textContent = isConnErr ? `无法连接本地代理 (${gateway})，请确认 ftp_bridge.py 已启动` : `FTP 目录拉取失败: ${err.message}`;
     }
   }
 
@@ -1699,9 +1705,15 @@ function initNetworkImportDialog() {
   if (btnCopyFtpBridge) {
     btnCopyFtpBridge.addEventListener('click', async () => {
       const bridgeScript = [
-        "import ftplib, json, urllib.parse, http.server, io",
+        "import ftplib, json, urllib.parse, http.server, io, re",
         "class H(http.server.BaseHTTPRequestHandler):",
-        "    def _cors(self): self.send_header('Access-Control-Allow-Origin','*')",
+        "    def _cors(self):",
+        "        self.send_header('Access-Control-Allow-Origin', '*')",
+        "        self.send_header('Access-Control-Allow-Methods', 'GET, OPTIONS')",
+        "        self.send_header('Access-Control-Allow-Headers', '*')",
+        "        self.send_header('Access-Control-Allow-Private-Network', 'true')",
+        "    def do_OPTIONS(self):",
+        "        self.send_response(204); self._cors(); self.end_headers()",
         "    def do_GET(self):",
         "        u = urllib.parse.urlparse(self.path); q = urllib.parse.parse_qs(u.query)",
         "        g = lambda k,d='': q.get(k,[d])[0]",
@@ -1711,6 +1723,11 @@ function initNetworkImportDialog() {
         "            if u.path=='/list':",
         "                p=g('path','/'); ftp.cwd(p); lines=[]; ftp.dir(lines.append); out=[]",
         "                for ln in lines:",
+        "                    m_win = re.match(r'^\\d{2}-\\d{2}-\\d{2,4}\\s+\\d{2}:\\d{2}(?:AM|PM)?\\s+(<DIR>|\\d+)\\s+(.+)$', ln.strip(), re.I)",
+        "                    if m_win:",
+        "                        nm = m_win.group(2).strip()",
+        "                        if nm not in ('.','..'): out.append({'name':nm,'isDir':m_win.group(1).upper()=='<DIR>','size':0 if m_win.group(1).upper()=='<DIR>' else int(m_win.group(1))})",
+        "                        continue",
         "                    ps=ln.split(None,8)",
         "                    if len(ps)>=9 and ps[8] not in ('.','..'): out.append({'name':ps[8],'isDir':ln.startswith('d'),'size':int(ps[4]) if ps[4].isdigit() else 0})",
         "                b=json.dumps({'ok':True,'dir':ftp.pwd(),'entries':out}).encode()",
@@ -1720,7 +1737,7 @@ function initNetworkImportDialog() {
         "                self.send_response(200); self._cors(); self.send_header('Content-Length',str(len(data))); self.end_headers(); self.wfile.write(data)",
         "            ftp.quit()",
         "        except Exception as e:",
-        "            b=json.dumps({'ok':False,'error':str(e)}).encode(); self.send_response(200); self._cors(); self.end_headers(); self.wfile.write(b)",
+        "            b=json.dumps({'ok':False,'error':str(e)}).encode(); self.send_response(200); self._cors(); self.send_header('Content-Type','application/json'); self.end_headers(); self.wfile.write(b)",
         "print('FTP Web Bridge running on http://127.0.0.1:8765'); http.server.HTTPServer(('127.0.0.1',8765),H).serve_forever()"
       ].join("\n");
       try {
