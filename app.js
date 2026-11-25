@@ -1296,10 +1296,22 @@ function initNetworkImportDialog() {
   const btnFtpParseQuick = document.getElementById('btnFtpParseQuick');
   const txtFtpHost = document.getElementById('txtFtpHost');
   const txtFtpPort = document.getElementById('txtFtpPort');
+  const selFtpEncoding = document.getElementById('selFtpEncoding');
+  const chkFtpPasv = document.getElementById('chkFtpPasv');
   const txtFtpUser = document.getElementById('txtFtpUser');
   const txtFtpPass = document.getElementById('txtFtpPass');
   const txtFtpPath = document.getElementById('txtFtpPath');
   const txtFtpGateway = document.getElementById('txtFtpGateway');
+  const btnFtpConnectBrowse = document.getElementById('btnFtpConnectBrowse');
+  const btnCopyFtpBridge = document.getElementById('btnCopyFtpBridge');
+  const btnFtpGoUp = document.getElementById('btnFtpGoUp');
+  const lblFtpCurrentDir = document.getElementById('lblFtpCurrentDir');
+  const btnFtpDownloadDir = document.getElementById('btnFtpDownloadDir');
+  const ftpBrowseTableBody = document.getElementById('ftpBrowseTableBody');
+  const lblFtpSelectedPreview = document.getElementById('lblFtpSelectedPreview');
+
+  const boxHttpDirList = document.getElementById('boxHttpDirList');
+  const httpDirTableBody = document.getElementById('httpDirTableBody');
 
   if (!modal || !btnOpen) return;
 
@@ -1417,6 +1429,7 @@ function initNetworkImportDialog() {
     lblNetworkStatus.textContent = `正在探测链接信息: ${rawUrl}...`;
     lblHttpStatusTag.innerHTML = `<span style="color:#fbbf24;">🔍 探测中...</span>`;
     httpCorsAlert.style.display = 'none';
+    if (boxHttpDirList) boxHttpDirList.style.display = 'none';
 
     let fallbackName = parseFilenameFromUrl(rawUrl);
     lblHttpFilename.textContent = fallbackName;
@@ -1447,6 +1460,60 @@ function initNetworkImportDialog() {
         if (fnMatch && fnMatch[1]) fallbackName = decodeURIComponent(fnMatch[1]);
       }
 
+      // Check if it's an HTML directory index (e.g. Nginx/Apache/Python http.server)
+      if (ct.toLowerCase().includes('text/html') && boxHttpDirList && httpDirTableBody) {
+        const htmlResp = await fetch(rawUrl, { mode: 'cors' });
+        const htmlText = await htmlResp.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(htmlText, 'text/html');
+        const anchors = Array.from(doc.querySelectorAll('a[href]'));
+        const items = [];
+        for (const a of anchors) {
+          const href = a.getAttribute('href');
+          if (!href || href === '../' || href === './' || href.startsWith('?') || href.startsWith('#')) continue;
+          const isDir = href.endsWith('/');
+          const isZip = /\.zip$/i.test(href.split('?')[0]);
+          if (isDir || isZip) {
+            let absUrl = href;
+            try { absUrl = new URL(href, rawUrl.endsWith('/') ? rawUrl : rawUrl + '/').href; } catch (e) {}
+            const displayName = decodeURIComponent(a.textContent.trim() || href);
+            items.push({ name: displayName, href: absUrl, isDir, isZip });
+          }
+        }
+
+        if (items.length > 0) {
+          lblHttpFilename.textContent = '(HTTP 目录索引页面)';
+          lblHttpFileSize.textContent = `发现 ${items.length} 个目录/ZIP项`;
+          lblHttpContentType.textContent = ct;
+          lblHttpStatusTag.innerHTML = `<span style="color:#38bdf8; font-weight:bold;">📂 已解析目录列表，请下方选择目标</span>`;
+          lblNetworkStatus.textContent = `探测到 HTTP 目录页面，共列出 ${items.length} 个可用项目。`;
+
+          httpDirTableBody.innerHTML = '';
+          for (const it of items) {
+            const tr = document.createElement('tr');
+            const icon = it.isDir ? '📁' : '📦';
+            const typeBadge = it.isDir ? '<span style="color:#fbbf24;">目录</span>' : '<span style="color:#4ade80;">ZIP 工程包</span>';
+            const actionBtnText = it.isDir ? '进入目录 ➔' : '⬇️ 下载并载入';
+            tr.innerHTML = `
+              <td style="font-family: monospace; font-size: 13px; color: ${it.isDir ? '#93c5fd' : '#f1f5f9'};">${icon} ${escapeHtml(it.name)}</td>
+              <td>${typeBadge}</td>
+              <td style="text-align: center;"><button class="btn btn-secondary" style="padding: 3px 10px; font-size: 12.5px;">${actionBtnText}</button></td>
+            `;
+            tr.querySelector('button').addEventListener('click', () => {
+              if (it.isDir) {
+                txtHttpUrl.value = it.href;
+                inspectHttpUrl(it.href);
+              } else {
+                runStreamDownload(it.href, it.name.replace(/\/$/, ''));
+              }
+            });
+            httpDirTableBody.appendChild(tr);
+          }
+          boxHttpDirList.style.display = 'flex';
+          return;
+        }
+      }
+
       lblHttpFilename.textContent = fallbackName;
       lblHttpFileSize.textContent = formatBytes(size);
       lblHttpContentType.textContent = ct;
@@ -1475,34 +1542,228 @@ function initNetworkImportDialog() {
     }
   }
 
+  // --- FTP Directory Browser State & Logic ---
+  let currentFtpDir = '/';
+  let selectedFtpEntry = null;
+
+  function detectSpecHint(name) {
+    if (!name) return '--';
+    const hints = [];
+    if (/98/i.test(name)) hints.push('98寸');
+    else if (/86/i.test(name)) hints.push('86寸');
+    else if (/75/i.test(name)) hints.push('75寸');
+    else if (/65/i.test(name)) hints.push('65寸');
+    if (/4K/i.test(name)) hints.push('4K');
+    else if (/2K/i.test(name)) hints.push('2K');
+    if (/\.zip$/i.test(name)) hints.push('ZIP包');
+    return hints.length ? hints.join(' / ') : '--';
+  }
+
+  async function browseFtpDirectory(targetDir) {
+    const host = txtFtpHost.value.trim();
+    const gateway = txtFtpGateway.value.trim().replace(/\/+$/, '');
+    if (!host) {
+      alert('请先输入 FTP 服务器 IP / 主机地址。');
+      txtFtpHost.focus();
+      return;
+    }
+
+    localStorage.setItem('apt_ftp_config', JSON.stringify({
+      host: host,
+      port: txtFtpPort.value,
+      user: txtFtpUser.value.trim(),
+      path: targetDir || txtFtpPath.value.trim() || '/',
+      gateway: gateway
+    }));
+
+    if (!gateway) {
+      ftpBrowseTableBody.innerHTML = `
+        <tr>
+          <td colspan="3" style="padding: 18px 16px; color: #fbbf24; line-height: 1.7;">
+            ⚠️ <b>无法直接探测显示 FTP 目录列表（未配置本地代理网关）</b><br/>
+            <span style="color: #cbd5e1;">原因：Chrome / Edge 浏览器安全沙箱禁止网页 JS 直接连接原始 TCP Socket (FTP 21 端口)。</span><br/>
+            <span style="color: #93c5fd;">💡 如需在网页内真实浏览局域网 FTP 目录：请点击上方【<b>📋 复制本地代理脚本</b>】在本地运行一次（需 Python 3），并在网关框填入 <code>http://127.0.0.1:8765</code> 后再点【🔗 连接并浏览】。</span>
+          </td>
+        </tr>
+      `;
+      lblNetworkStatus.textContent = 'FTP 直连受浏览器沙箱限制：请配置本地代理网关或使用 HTTP 直链/拖拽导入。';
+      return;
+    }
+
+    const dirToBrowse = targetDir || txtFtpPath.value.trim() || '/';
+    lblNetworkStatus.textContent = `正在通过代理网关浏览 FTP 目录: ${host}:${txtFtpPort.value}${dirToBrowse} ...`;
+    ftpBrowseTableBody.innerHTML = `<tr><td colspan="3" style="text-align:center; padding: 28px; color:#38bdf8;">⏳ 正在连接 FTP 服务器并拉取目录列表...</td></tr>`;
+
+    try {
+      const qs = new URLSearchParams({
+        host: host,
+        port: txtFtpPort.value || '21',
+        user: txtFtpUser.value.trim() || 'anonymous',
+        pass: txtFtpPass.value || '',
+        path: dirToBrowse,
+        encoding: selFtpEncoding ? selFtpEncoding.value : 'gbk',
+        pasv: chkFtpPasv && chkFtpPasv.checked ? '1' : '0'
+      });
+      const resp = await fetch(`${gateway}/list?${qs.toString()}`);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
+      const data = await resp.json();
+      if (!data.ok) throw new Error(data.error || '代理返回失败');
+
+      currentFtpDir = data.dir || dirToBrowse;
+      txtFtpPath.value = currentFtpDir;
+      lblFtpCurrentDir.textContent = `📁 当前目录: ${currentFtpDir}`;
+      btnFtpGoUp.disabled = (currentFtpDir === '/' || !currentFtpDir);
+      selectedFtpEntry = null;
+      lblFtpSelectedPreview.textContent = '📦 当前选中: (尚未选择文件)';
+
+      const entries = data.entries || [];
+      if (entries.length === 0) {
+        ftpBrowseTableBody.innerHTML = `<tr><td colspan="3" style="text-align:center; padding: 28px; color:#64748b;">(空目录)</td></tr>`;
+        lblNetworkStatus.textContent = `已连接 ${host}，当前目录为空。`;
+        return;
+      }
+
+      // Sort dirs first
+      entries.sort((a, b) => (a.isDir === b.isDir ? a.name.localeCompare(b.name) : a.isDir ? -1 : 1));
+      ftpBrowseTableBody.innerHTML = '';
+
+      for (const entry of entries) {
+        const tr = document.createElement('tr');
+        tr.style.cursor = 'pointer';
+        const icon = entry.isDir ? '📁' : (/\.zip$/i.test(entry.name) ? '📦' : '📄');
+        const sizeStr = entry.isDir ? '目录' : formatBytes(entry.size);
+        const specHint = entry.isDir ? '文件夹' : detectSpecHint(entry.name);
+
+        tr.innerHTML = `
+          <td style="font-family: monospace; font-size: 13.5px; color: ${entry.isDir ? '#93c5fd' : '#f1f5f9'};">${icon} ${escapeHtml(entry.name)}</td>
+          <td style="color: #94a3b8; font-size: 13px;">${escapeHtml(specHint)}</td>
+          <td style="color: #cbd5e1; font-size: 13px;">${escapeHtml(sizeStr)}</td>
+        `;
+
+        tr.addEventListener('click', () => {
+          Array.from(ftpBrowseTableBody.children).forEach(r => r.style.backgroundColor = '');
+          tr.style.backgroundColor = '#1d4ed8';
+          selectedFtpEntry = entry;
+          const fullP = (currentFtpDir.endsWith('/') ? currentFtpDir : currentFtpDir + '/') + entry.name;
+          lblFtpSelectedPreview.textContent = `📦 当前选中: ${fullP} (${sizeStr})`;
+        });
+
+        tr.addEventListener('dblclick', () => {
+          const fullP = (currentFtpDir.endsWith('/') ? currentFtpDir : currentFtpDir + '/') + entry.name;
+          if (entry.isDir) {
+            browseFtpDirectory(fullP);
+          } else {
+            downloadFtpEntry(fullP, entry.name);
+          }
+        });
+
+        ftpBrowseTableBody.appendChild(tr);
+      }
+
+      lblNetworkStatus.textContent = `已浏览目录 ${currentFtpDir}（共 ${entries.length} 项；双击目录进入，双击文件下载载入）`;
+    } catch (err) {
+      ftpBrowseTableBody.innerHTML = `<tr><td colspan="3" style="text-align:center; padding: 24px; color:#f87171;">❌ 连接/浏览失败: ${escapeHtml(err.message)}</td></tr>`;
+      lblNetworkStatus.textContent = `FTP 目录拉取失败: ${err.message}`;
+    }
+  }
+
+  function downloadFtpEntry(remotePath, filename) {
+    const host = txtFtpHost.value.trim();
+    const gateway = txtFtpGateway.value.trim().replace(/\/+$/, '');
+    if (!gateway) return;
+    const qs = new URLSearchParams({
+      host: host,
+      port: txtFtpPort.value || '21',
+      user: txtFtpUser.value.trim() || 'anonymous',
+      pass: txtFtpPass.value || '',
+      path: remotePath,
+      encoding: selFtpEncoding ? selFtpEncoding.value : 'gbk',
+      pasv: chkFtpPasv && chkFtpPasv.checked ? '1' : '0'
+    });
+    runStreamDownload(`${gateway}/download?${qs.toString()}`, filename || 'ftp_package.zip');
+  }
+
+  if (btnFtpConnectBrowse) {
+    btnFtpConnectBrowse.addEventListener('click', () => browseFtpDirectory(txtFtpPath.value.trim() || '/'));
+  }
+
+  if (btnFtpGoUp) {
+    btnFtpGoUp.addEventListener('click', () => {
+      if (!currentFtpDir || currentFtpDir === '/') return;
+      const parts = currentFtpDir.split('/').filter(Boolean);
+      parts.pop();
+      browseFtpDirectory('/' + parts.join('/'));
+    });
+  }
+
+  if (btnCopyFtpBridge) {
+    btnCopyFtpBridge.addEventListener('click', async () => {
+      const bridgeScript = [
+        "import ftplib, json, urllib.parse, http.server, io",
+        "class H(http.server.BaseHTTPRequestHandler):",
+        "    def _cors(self): self.send_header('Access-Control-Allow-Origin','*')",
+        "    def do_GET(self):",
+        "        u = urllib.parse.urlparse(self.path); q = urllib.parse.parse_qs(u.query)",
+        "        g = lambda k,d='': q.get(k,[d])[0]",
+        "        try:",
+        "            ftp = ftplib.FTP(encoding=g('encoding','gbk')); ftp.connect(g('host'),int(g('port',21)),timeout=10)",
+        "            ftp.login(g('user','anonymous'),g('pass','')); ftp.set_pasv(g('pasv','1')=='1')",
+        "            if u.path=='/list':",
+        "                p=g('path','/'); ftp.cwd(p); lines=[]; ftp.dir(lines.append); out=[]",
+        "                for ln in lines:",
+        "                    ps=ln.split(None,8)",
+        "                    if len(ps)>=9 and ps[8] not in ('.','..'): out.append({'name':ps[8],'isDir':ln.startswith('d'),'size':int(ps[4]) if ps[4].isdigit() else 0})",
+        "                b=json.dumps({'ok':True,'dir':ftp.pwd(),'entries':out}).encode()",
+        "                self.send_response(200); self._cors(); self.send_header('Content-Type','application/json'); self.end_headers(); self.wfile.write(b)",
+        "            elif u.path=='/download':",
+        "                buf=io.BytesIO(); ftp.retrbinary('RETR '+g('path'),buf.write); data=buf.getvalue()",
+        "                self.send_response(200); self._cors(); self.send_header('Content-Length',str(len(data))); self.end_headers(); self.wfile.write(data)",
+        "            ftp.quit()",
+        "        except Exception as e:",
+        "            b=json.dumps({'ok':False,'error':str(e)}).encode(); self.send_response(200); self._cors(); self.end_headers(); self.wfile.write(b)",
+        "print('FTP Web Bridge running on http://127.0.0.1:8765'); http.server.HTTPServer(('127.0.0.1',8765),H).serve_forever()"
+      ].join("\n");
+      try {
+        await navigator.clipboard.writeText(bridgeScript);
+        if (!txtFtpGateway.value.trim()) txtFtpGateway.value = 'http://127.0.0.1:8765';
+        showToast('已复制本地 Python FTP 代理脚本，并已自动填入网关地址 http://127.0.0.1:8765', 3500);
+        alert('已复制本地单文件 Python FTP 桥接脚本到剪贴板！\n\n使用方法：\n1. 新建文件 ftp_bridge.py 并粘贴内容；\n2. 终端执行 python ftp_bridge.py；\n3. 回到网页点击【🔗 连接并浏览】即可真实浏览局域网内任意 FTP 文件与目录！');
+      } catch (e) {
+        alert('复制失败，请检查浏览器剪贴板权限。');
+      }
+    });
+  }
+
   // Execute Download
   btnExecuteHttpDownload.addEventListener('click', async () => {
     if (activeTab === 'ftp') {
       const host = txtFtpHost.value.trim();
-      const gateway = txtFtpGateway.value.trim();
+      const gateway = txtFtpGateway.value.trim().replace(/\/+$/, '');
       if (!host) {
         alert('请先输入 FTP 服务器 IP / 主机地址。');
         txtFtpHost.focus();
         return;
       }
-      localStorage.setItem('apt_ftp_config', JSON.stringify({
-        host: host,
-        port: txtFtpPort.value,
-        user: txtFtpUser.value.trim(),
-        path: txtFtpPath.value.trim(),
-        gateway: gateway
-      }));
-
       if (gateway) {
-        const fullGatewayUrl = `${gateway}?host=${encodeURIComponent(host)}&port=${txtFtpPort.value}&user=${encodeURIComponent(txtFtpUser.value)}&path=${encodeURIComponent(txtFtpPath.value)}`;
-        runStreamDownload(fullGatewayUrl, 'ftp_upgrade.zip');
+        if (selectedFtpEntry && !selectedFtpEntry.isDir) {
+          const fullP = (currentFtpDir.endsWith('/') ? currentFtpDir : currentFtpDir + '/') + selectedFtpEntry.name;
+          downloadFtpEntry(fullP, selectedFtpEntry.name);
+        } else {
+          const targetPath = txtFtpPath.value.trim();
+          if (/\.zip$/i.test(targetPath)) {
+            downloadFtpEntry(targetPath, targetPath.split('/').pop());
+          } else {
+            browseFtpDirectory(targetPath || '/');
+          }
+        }
       } else {
         alert(
           '【浏览器安全沙箱限制说明】\n\n' +
           '现代网页由于浏览器安全限制，无法直接对 FTP 21 端口建立原生 TCP Socket 连接。\n\n' +
-          '推荐操作方式：\n' +
-          '1. 请切换至【🔗 HTTP / HTTPS 直链下载】标签页使用 HTTP 协议下载；\n' +
-          '2. 或在本地 FileZilla/资源管理器下载后，直接将 ZIP 包拖拽进本网页，立即毫秒级载入！'
+          '解决方式：\n' +
+          '1. 点击【📋 复制本地代理脚本】运行本地 Python 桥接，即可在网页端实时探测目录与文件；\n' +
+          '2. 或切换至【🔗 HTTP / HTTPS 直链下载】标签页；\n' +
+          '3. 或在本地下载后直接拖拽 ZIP 到本网页！'
         );
       }
       return;

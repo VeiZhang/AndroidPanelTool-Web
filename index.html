@@ -588,7 +588,7 @@
 
   <!-- Modal 2: Network & FTP Import Dialog (从网络 / FTP 导入版控工程) 1:1 Aligned with Desktop -->
   <div class="modal-overlay" id="modalNetworkImport" style="display: none;">
-    <div class="modal-box" style="width: 960px; max-width: 95vw; height: 680px; max-height: 92vh; display: flex; flex-direction: column;">
+    <div class="modal-box" style="width: 1000px; max-width: 96vw; height: 760px; max-height: 92vh; display: flex; flex-direction: column;">
       <div class="modal-header">
         <h3 class="modal-title" style="color: #60a5fa;">🌐 从网络 / FTP 导入版控工程</h3>
         <button class="modal-close" id="btnCloseNetworkImport">&times;</button>
@@ -602,39 +602,32 @@
         </div>
 
         <!-- Tab 0: FTP Page (Default Active, 1:1 Aligned with Desktop Tab 0) -->
-        <div id="pageFtpImport" style="display: flex; flex-direction: column; gap: 14px; flex: 1; overflow-y: auto;">
-          <!-- Technical Notice Banner -->
-          <div style="padding: 12px 16px; background-color: #1e1b2e; border: 1px solid #4338ca; border-left: 4px solid #818cf8; border-radius: 6px; font-size: 13px; color: #cbd5e1; line-height: 1.6;">
-            <div style="font-weight: bold; color: #a5b4fc; margin-bottom: 4px;">ℹ️ 关于纯网页端直接连接 FTP 服务器的说明</div>
-            现代浏览器沙箱（Chrome / Edge / Firefox 等）出于操作系统与网络安全隔离，已完全移除了浏览器内核直接发起的原生 TCP Socket (FTP 21 端口) 连接能力。
-            <br/>如需在网页端载入 FTP 资源，推荐以下途径：
-            <ul style="margin: 4px 0 0 18px; padding: 0;">
-              <li><b>途径 1 (最推荐)</b>：切换至右侧<b>【🔗 HTTP / HTTPS 直链下载】</b>，使用公司内网 HTTP/群晖分享直链下载；</li>
-              <li><b>途径 2 (最快捷)</b>：在 Windows 本地资源管理器或 FileZilla 中下载后，<b>直接将 ZIP 包拖入本网页</b>即可即时解析；</li>
-              <li><b>途径 3 (代理网关)</b>：在下方配置内网 WebSocket / HTTP-to-FTP 代理桥接服务地址。</li>
-            </ul>
+        <div id="pageFtpImport" style="display: flex; flex-direction: column; gap: 10px; flex: 1; overflow-y: auto;">
+          <!-- Compact Technical Notice Banner -->
+          <div style="padding: 8px 14px; background-color: #1e1b2e; border: 1px solid #4338ca; border-left: 4px solid #818cf8; border-radius: 6px; font-size: 12.5px; color: #cbd5e1; line-height: 1.5;">
+            <b style="color: #a5b4fc;">ℹ️ 网页端 FTP 说明：</b>现代浏览器沙箱禁止 JS 直接发起 TCP 21 端口连接。如需在网页内<b>浏览并探测 FTP 文件/目录</b>，请点击右侧<b>【📋 复制本地代理脚本】</b>在本机运行一次，或直接使用<b>【🔗 HTTP 直链/目录】</b>及本地拖拽导入。
           </div>
 
           <!-- FTP Connection Form -->
-          <div class="group-box">
-            <div class="group-title">📁 FTP 连接与地址配置</div>
+          <div class="group-box" style="margin-bottom: 0; padding: 10px 14px;">
+            <div class="group-title" style="margin-bottom: 8px;">📁 FTP 连接与地址配置</div>
             <div class="group-content">
-              <div class="form-row" style="margin-bottom: 10px;">
-                <label class="form-label" style="min-width: 90px;">快捷粘贴:</label>
+              <div class="form-row" style="margin-bottom: 8px;">
+                <label class="form-label" style="min-width: 85px;">快捷粘贴:</label>
                 <input type="text" id="txtFtpQuickUrl" class="input-text" style="flex: 1;" placeholder="可选：直接粘贴 ftp://账号:密码@IP:端口/路径，系统将自动拆分" />
                 <button class="btn btn-secondary" id="btnFtpParseQuick">📋 识别填充</button>
               </div>
-              <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+              <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 10px; margin-bottom: 8px;">
                 <div class="form-row">
-                  <label class="form-label" style="min-width: 80px;">IP / 主机:</label>
+                  <label class="form-label" style="min-width: 75px;">IP / 主机:</label>
                   <input type="text" id="txtFtpHost" class="input-text" style="flex: 1;" placeholder="例如 192.168.1.100" />
                 </div>
                 <div class="form-row">
-                  <label class="form-label" style="min-width: 50px;">端口:</label>
+                  <label class="form-label" style="min-width: 45px;">端口:</label>
                   <input type="number" id="txtFtpPort" class="input-text" style="flex: 1;" value="21" />
                 </div>
                 <div class="form-row">
-                  <label class="form-label" style="min-width: 50px;">编码:</label>
+                  <label class="form-label" style="min-width: 45px;">编码:</label>
                   <select id="selFtpEncoding" class="select-input" style="flex: 1;">
                     <option value="gbk">GBK (Windows)</option>
                     <option value="utf-8">UTF-8 (Linux)</option>
@@ -646,23 +639,60 @@
                   </label>
                 </div>
               </div>
-              <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px;">
                 <div class="form-row">
-                  <label class="form-label" style="min-width: 80px;">账号:</label>
+                  <label class="form-label" style="min-width: 75px;">账号:</label>
                   <input type="text" id="txtFtpUser" class="input-text" style="flex: 1;" placeholder="匿名留空或 anonymous" />
                 </div>
                 <div class="form-row">
-                  <label class="form-label" style="min-width: 60px;">密码:</label>
+                  <label class="form-label" style="min-width: 55px;">密码:</label>
                   <input type="password" id="txtFtpPass" class="input-text" style="flex: 1;" placeholder="留空或密码" />
                 </div>
-                <div class="form-row">
-                  <label class="form-label" style="min-width: 80px;">远程目录:</label>
-                  <input type="text" id="txtFtpPath" class="input-text" style="flex: 1;" value="/" />
-                </div>
               </div>
-              <div class="form-row">
-                <label class="form-label" style="min-width: 110px;">(可选) 代理网关:</label>
-                <input type="text" id="txtFtpGateway" class="input-text" style="flex: 1;" placeholder="例如 http://127.0.0.1:8080/ftp-proxy (若局域网部署了 FTP Web 代理服务)" />
+              <div class="form-row" style="margin-bottom: 8px; gap: 8px;">
+                <label class="form-label" style="min-width: 75px;">远程路径:</label>
+                <input type="text" id="txtFtpPath" class="input-text" style="flex: 1;" value="/" placeholder="/ 或 /builds/panel_v1.zip" />
+                <button class="btn" id="btnFtpConnectBrowse" style="min-width: 130px; font-weight: bold; background-color: #2563eb; color: #ffffff; border: 1px solid #3b82f6;">🔗 连接并浏览</button>
+              </div>
+              <div class="form-row" style="gap: 8px;">
+                <label class="form-label" style="min-width: 105px;">(可选) 代理网关:</label>
+                <input type="text" id="txtFtpGateway" class="input-text" style="flex: 1;" placeholder="例如 http://127.0.0.1:8765 (若运行了本地 FTP-to-HTTP 桥接代理)" />
+                <button class="btn btn-secondary" id="btnCopyFtpBridge" title="复制单文件 Python 本地 FTP 代理脚本命令，运行后网页即可真实浏览局域网 FTP">📋 复制本地代理脚本</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Remote Directory Browser Group (1:1 Aligned with Desktop) -->
+          <div class="group-box" style="flex: 1; display: flex; flex-direction: column; min-height: 200px; margin-bottom: 0; padding: 10px 14px;">
+            <div class="group-title">远程目录浏览（双击目录进入，双击文件直接下载并载入）</div>
+            <div class="group-content" style="flex: 1; display: flex; flex-direction: column; gap: 8px; min-height: 0;">
+              <div class="form-row" style="gap: 10px; align-items: center;">
+                <button class="btn btn-secondary" id="btnFtpGoUp" disabled>⬆️ 上一级</button>
+                <span id="lblFtpCurrentDir" style="color: #93c5fd; font-weight: bold; font-family: monospace; font-size: 13.5px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">📁 当前目录: (尚未连接)</span>
+                <button class="btn btn-secondary" id="btnFtpDownloadDir" disabled title="将当前目录下的全部文件递归下载并载入工作区">📥 下载当前整个目录 (散装工程)</button>
+              </div>
+
+              <div class="table-container" style="flex: 1; min-height: 130px; overflow-y: auto; border: 1px solid var(--border-frame); border-radius: 6px; background: #121218;">
+                <table class="data-table" id="ftpBrowseTable">
+                  <thead>
+                    <tr>
+                      <th style="width: 52%;">名称 (完整无截断)</th>
+                      <th style="width: 28%;">规格与屏参识别</th>
+                      <th style="width: 20%;">大小 / 类型</th>
+                    </tr>
+                  </thead>
+                  <tbody id="ftpBrowseTableBody">
+                    <tr>
+                      <td colspan="3" style="text-align: center; color: #64748b; padding: 36px 12px;">
+                        尚未连接 FTP 服务器。配置上方信息后点击【🔗 连接并浏览】（需配置本地代理网关或切换至 HTTP 直链）。
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div style="background-color: #161b26; border: 1px solid #334155; border-radius: 4px; padding: 6px 12px;">
+                <span id="lblFtpSelectedPreview" style="color: #38bdf8; font-family: monospace; font-size: 13.5px; font-weight: bold;">📦 当前选中: (尚未选择文件)</span>
               </div>
             </div>
           </div>
@@ -696,6 +726,25 @@
               <div id="httpCorsAlert" style="display: none; margin-top: 12px; padding: 10px 14px; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 6px; font-size: 13px; color: #fbbf24; line-height: 1.6;">
                 ⚠️ <b>浏览器跨域提示</b>：目标服务器若未开启跨域头 (CORS) 或在 HTTPS 页面下载 HTTP 资源，可能会被浏览器底层安全策略拦截。<br/>
                 💡 <b>贴心支持</b>：您可以直接点击 <a id="linkHttpDirectDownload" href="#" target="_blank" style="color: #38bdf8; text-decoration: underline; font-weight: bold;">在新标签页直接下载本文件</a>，下载后直接将 ZIP 包拖拽到本工具窗口中，即可瞬时秒级完成载入！
+              </div>
+            </div>
+          </div>
+
+          <!-- 2.5 HTTP Directory Index Browser (Auto-shown if URL is an HTML directory listing) -->
+          <div class="group-box" id="boxHttpDirList" style="display: none; flex: 1; min-height: 200px; flex-direction: column;">
+            <div class="group-title">📂 探测到 HTTP 目录列表（双击或点击右侧按钮直接下载载入）</div>
+            <div class="group-content" style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
+              <div class="table-container" style="flex: 1; overflow-y: auto; border: 1px solid var(--border-frame); border-radius: 6px; background: #121218;">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 65%;">目录 / 文件名称</th>
+                      <th style="width: 15%;">类型</th>
+                      <th style="width: 20%; text-align: center;">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="httpDirTableBody"></tbody>
+                </table>
               </div>
             </div>
           </div>
